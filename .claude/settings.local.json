@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(where:*)",
+      "Bash(C:DEVpython.exe -c:*)",
+      "Bash(cmd /c \"cd /d \"\"c:\\\\yb_practice1\\\\0210ai 모음 페이지\"\" && C:\\\\DEV\\\\python.exe -c \"\"import sys; print\\(sys.version\\)\"\"\")",
+      "Bash(cmd /c \"cd /d \"\"c:\\\\yb_practice1\\\\0210ai 모음 페이지\"\" && C:\\\\DEV\\\\python.exe convert.py\")",
+      "Bash(cmd /c \"C:\\\\DEV\\\\python.exe \"\"c:\\\\yb_practice1\\\\0210ai 모음 페이지\\\\convert.py\"\"\")",
+      "Bash(powershell -Command:*)"
+    ]
+  }
+}
