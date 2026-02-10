@@ -1204,6 +1204,36 @@
             to { transform: rotate(360deg); }
         }
 
+        /* ===== Search Result Banner ===== */
+        .search-result-banner {
+            display: none;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.8rem 1.2rem;
+            margin-bottom: 1.2rem;
+            background: rgba(99, 102, 241, 0.08);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 12px;
+            color: var(--text-color);
+            font-size: 0.95rem;
+        }
+        .search-result-banner.active {
+            display: flex;
+        }
+        .search-result-banner i {
+            color: var(--primary);
+            font-size: 1rem;
+        }
+        .search-result-banner .matched-name {
+            font-weight: 700;
+            color: var(--primary);
+        }
+        .search-result-banner .result-count {
+            margin-left: auto;
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
         /* ===== No Results ===== */
         .no-results {
             text-align: center;
@@ -1386,6 +1416,11 @@
 
         <!-- Tools Grid -->
         <section class="tools-container">
+            <div class="search-result-banner" id="searchResultBanner">
+                <i class="fas fa-search"></i>
+                <span id="searchResultText"></span>
+                <span class="result-count" id="searchResultCount"></span>
+            </div>
             <div class="tools-grid" id="toolsGrid">
                 <div class="loading">
                     <div class="spinner"></div>
@@ -1573,6 +1608,218 @@ let currentFilters = {
 // Favorites (persisted in localStorage)
 let favorites = JSON.parse(localStorage.getItem('aiFavorites') || '[]');
 
+// ===== Korean Fuzzy Search System =====
+// Korean aliases: maps Korean pronunciation / common typos → canonical tool name
+const toolAliases = {
+    // 지식 & 생산성
+    'chatgpt': { canonical: 'ChatGPT', aliases: ['챗지피티', '챗gpt', '챗GPT', '쳇지피티', '챗지파티', '챗쥐피티', '챗피티', '쳇GPT', '쳇gpt', '챗지피디', '챗지피', '챗쥐피디', '챗쥐피', '채팅지피티', '챗기피티'] },
+    'claude': { canonical: 'Claude', aliases: ['클로드', '클라우드', '끌로드', '클로디', '클루드'] },
+    'deepseek': { canonical: 'DeepSeek', aliases: ['딥시크', '딥씩', '딥씨크', '딥식', '딥시크'] },
+    'perplexity': { canonical: 'Perplexity', aliases: ['퍼플렉시티', '퍼플렉서티', '펄플렉시티', '퍼플렉', '퍼플', '퍼플랙시티', '퍼플랙서티'] },
+    'notebooklm': { canonical: 'NotebookLM', aliases: ['노트북엘엠', '노트북lm', '노트북LM', '노트북'] },
+    'notion': { canonical: 'Notion', aliases: ['노션', '노숀', '노시온'] },
+    'obsidian': { canonical: 'Obsidian', aliases: ['옵시디안', '옵시디언', '옵시디앤'] },
+    'gamma': { canonical: 'Gamma', aliases: ['감마', '갬마'] },
+    'mapify': { canonical: 'Mapify', aliases: ['맵피파이', '매피파이', '맵파이'] },
+    'napkin': { canonical: 'Napkin', aliases: ['냅킨', '넵킨', '내프킨'] },
+    'consensus': { canonical: 'Consensus', aliases: ['컨센서스', '콘센서스'] },
+    'firecrawl': { canonical: 'Firecrawl', aliases: ['파이어크롤', '파이어크롤'] },
+    'genspark': { canonical: 'Genspark', aliases: ['젠스파크', '겐스파크'] },
+    'deepl': { canonical: 'DeepL', aliases: ['딥엘', '디플', '딥L', '딥l'] },
+    'transync ai': { canonical: 'Transync AI', aliases: ['트랜싱크', '트랜싱크AI'] },
+    'wordly': { canonical: 'Wordly', aliases: ['워들리', '워드리'] },
+    'clovanote': { canonical: 'ClovaNote', aliases: ['클로바노트', '클로바', '클로바 노트'] },
+    'felo': { canonical: 'Felo', aliases: ['펠로', '필로'] },
+    'fireflies.ai': { canonical: 'Fireflies.ai', aliases: ['파이어플라이', '파이어플라이즈'] },
+    'lilys ai': { canonical: 'Lilys AI', aliases: ['릴리스', '릴리스AI', '릴리스 AI'] },
+    'otter.ai': { canonical: 'Otter.ai', aliases: ['오터', '오터AI', '오터 AI'] },
+    '뤼튼': { canonical: '뤼튼 (Wrtn)', aliases: ['뤼튼', '류튼', '뤼튼ai', '뤼튼AI', 'wrtn'] },
+    '다글로': { canonical: '다글로 (Daglo)', aliases: ['다글로', '대글로', 'daglo'] },
+    '비토': { canonical: '비토 (Vito)', aliases: ['비토', 'vito', '비또'] },
+
+    // 디자인 & UI/UX
+    'figma': { canonical: 'Figma AI (Figma Make)', aliases: ['피그마', '피그마AI', '피그마 AI', '피그마메이크'] },
+    'framer ai': { canonical: 'Framer AI', aliases: ['프레이머', '프레이머AI', '프레이머 AI'] },
+    'canva': { canonical: 'Canva Magic Studio', aliases: ['캔바', '켄바', '캔바AI', '캔바 매직'] },
+    'dora ai': { canonical: 'Dora AI', aliases: ['도라', '도라AI', '도라 AI'] },
+    'lovable': { canonical: 'Lovable', aliases: ['러버블', '로버블', '라바블'] },
+    'lovart': { canonical: 'Lovart', aliases: ['로바트', '러바트', '로바트'] },
+    'bolt.new': { canonical: 'Bolt.new', aliases: ['볼트', '볼트뉴', '볼트닷뉴'] },
+    'creatie ai': { canonical: 'Creatie AI', aliases: ['크리에이티', '크리에이티AI'] },
+    'khroma': { canonical: 'Khroma', aliases: ['크로마', '코로마'] },
+    'moonchild ai': { canonical: 'Moonchild AI', aliases: ['문차일드', '문차일드AI'] },
+    'musho ai': { canonical: 'Musho AI', aliases: ['무쇼', '무쇼AI', '머쇼'] },
+    'relume ai': { canonical: 'Relume AI', aliases: ['렐룸', '렐룸AI', '릴룸'] },
+    'spline ai': { canonical: 'Spline AI', aliases: ['스플라인', '스플라인AI'] },
+    'tempo.new': { canonical: 'Tempo.new', aliases: ['템포', '템포뉴'] },
+    'ux pilot': { canonical: 'UX Pilot', aliases: ['유엑스파일럿', 'UX파일럿', '유엑스 파일럿'] },
+    'uizard': { canonical: 'Uizard', aliases: ['유아이자드', '유아이져드'] },
+    'wegic': { canonical: 'Wegic', aliases: ['웨직', '웨직AI'] },
+    'v0': { canonical: 'v0 by Vercel', aliases: ['브이제로', 'v제로', '버셀', 'vercel'] },
+    '10web': { canonical: '10Web AI', aliases: ['텐웹', '10웹', '텐웹AI'] },
+    'banani': { canonical: 'Banani', aliases: ['바나니', '바나나'] },
+    'figr': { canonical: 'Figr.design', aliases: ['피거', '피거디자인'] },
+    'google stitch': { canonical: 'Google Stitch (Gemini 3 기반)', aliases: ['구글스티치', '구글 스티치', '스티치', '제미니3'] },
+
+    // 이미지 & 그래픽
+    'midjourney': { canonical: 'Midjourney V7', aliases: ['미드저니', '미져니', '미드저니v7', '미드져니', '밋저니', '밋져니', '미들저니', '미드 저니'] },
+    'dall-e': { canonical: 'DALL-E 4', aliases: ['달리', '달이', '달리4', 'dalle', '달리 4', '달이4'] },
+    'stable diffusion': { canonical: 'Automatic1111', aliases: ['스테이블디퓨전', '스테이블 디퓨전', 'SD', 'sd'] },
+    'automatic1111': { canonical: 'Automatic1111', aliases: ['오토매틱', '오토매틱1111'] },
+    'comfyui': { canonical: 'ComfyUI', aliases: ['컴피유아이', '컴피UI', '컴피', '콤피UI'] },
+    'adobe firefly': { canonical: 'Adobe Firefly 4', aliases: ['어도비파이어플라이', '어도비 파이어플라이', '파이어플라이', '파이어플라이4'] },
+    'leonardo': { canonical: 'Leonardo.ai', aliases: ['레오나르도', '레오나르도AI', '리오나르도'] },
+    'flux': { canonical: 'Flux 1.1 Pro', aliases: ['플럭스', '플럭스1.1'] },
+    'freepik': { canonical: 'Freepik', aliases: ['프리픽', '프리피크'] },
+    'ideogram': { canonical: 'Ideogram V3 Turbo', aliases: ['아이디오그램', '이디오그램', '아이디오그램v3'] },
+    'magnific': { canonical: 'Magnific AI', aliases: ['매그니픽', '매그니픽AI'] },
+    'recraft': { canonical: 'Recraft V3', aliases: ['리크래프트', '리크래프트v3'] },
+    'relight': { canonical: 'Relight AI (Luminar Neo)', aliases: ['리라이트', '리라이트AI', '루미나'] },
+    'scenario': { canonical: 'Scenario', aliases: ['시나리오'] },
+    'shutterstock': { canonical: 'Shutterstock AI', aliases: ['셔터스톡', '셔터스탁', '셔터스톡AI'] },
+    'topaz': { canonical: 'Topaz Photo AI (Gigapixel)', aliases: ['토파즈', '토파즈AI', '기가픽셀'] },
+    'visualgpt': { canonical: 'VisualGPT', aliases: ['비주얼지피티', '비주얼GPT', '비쥬얼GPT'] },
+    'getty': { canonical: 'Getty Images AI', aliases: ['게티이미지', '게티', '게티이미지스'] },
+    'evoto': { canonical: 'Evoto AI', aliases: ['에보토', '에보토AI'] },
+    'nano banana': { canonical: 'Nano Banana Pro', aliases: ['나노바나나', '나노 바나나'] },
+
+    // 영상 제작
+    'runway': { canonical: 'Runway Gen-4.5', aliases: ['런웨이', '런웨이gen', '런웨이 젠'] },
+    'sora': { canonical: 'Sora 2 (OpenAI)', aliases: ['소라', '소라2', '소라AI', '쏘라'] },
+    'pika': { canonical: 'Pika 2.0', aliases: ['피카', '피카2.0', '피카AI'] },
+    'kling': { canonical: 'Kling 2.6 Pro', aliases: ['클링', '클링2.6', '클링AI', '클링 프로'] },
+    'luma': { canonical: 'Luma Ray 3', aliases: ['루마', '루마레이', '루마 레이'] },
+    'heygen': { canonical: 'HeyGen', aliases: ['헤이젠', '헤이겐', '해이젠', '헤이 젠'] },
+    'synthesia': { canonical: 'Synthesia', aliases: ['신세시아', '신써시아', '신디시아'] },
+    'd-id': { canonical: 'D-ID', aliases: ['디아이디', 'D아이디', '디-아이디'] },
+    'descript': { canonical: 'Descript', aliases: ['디스크립트', '데스크립트'] },
+    'invideo': { canonical: 'Invideo AI', aliases: ['인비디오', '인비디오AI'] },
+    'pictory': { canonical: 'Pictory', aliases: ['픽토리', '핏토리'] },
+    'opusclip': { canonical: 'OpusClip', aliases: ['오퍼스클립', '오푸스클립', '오퍼스 클립'] },
+    'submagic': { canonical: 'Submagic', aliases: ['서브매직', '섭매직'] },
+    'vizard': { canonical: 'Vizard', aliases: ['비자드', '비져드'] },
+    'vyond': { canonical: 'Vyond', aliases: ['비욘드', '바이온드'] },
+    'elai': { canonical: 'Elai.io', aliases: ['엘라이', '일라이', '엘라이io'] },
+    'hunyuan': { canonical: 'Hunyuan Video', aliases: ['훈위안', '혼위안', '훈유안', '훈위엔'] },
+    'grok': { canonical: 'Grok Imagine (X)', aliases: ['그록', '그록이매진', '그락'] },
+    'ltx studio': { canonical: 'LTX Studio', aliases: ['엘티엑스', 'LTX스튜디오'] },
+    'ltx video': { canonical: 'LTX Video (LTX-2)', aliases: ['엘티엑스비디오'] },
+    'manus': { canonical: 'Manus', aliases: ['마누스', '매너스'] },
+    'mochi': { canonical: 'Mochi 1', aliases: ['모치', '모찌'] },
+    'reap': { canonical: 'Reap', aliases: ['리프', '리앱'] },
+    'wan': { canonical: 'Wan 2.2 / 2.5', aliases: ['완', '완AI'] },
+    'google veo': { canonical: 'Google Veo 3.1', aliases: ['구글비오', '구글 비오', '비오', '비오3'] },
+
+    // 이미지 - 웹툰/만화
+    'anifusion': { canonical: 'Anifusion', aliases: ['아니퓨전', '애니퓨전'] },
+    'dashtoon': { canonical: 'Dashtoon', aliases: ['대시툰', '대쉬툰', '댓시툰'] },
+    'drawstory': { canonical: 'Drawstory', aliases: ['드로우스토리', '드로스토리'] },
+    'novel ai': { canonical: 'Novel AI', aliases: ['노벨AI', '노블AI', '노벨 AI'] },
+    'story tribe': { canonical: 'Story Tribe', aliases: ['스토리트라이브', '스토리 트라이브'] },
+
+    // 오디오
+    'elevenlabs': { canonical: 'ElevenLabs', aliases: ['일레븐랩스', '일레븐렙스', '11랩스', '11labs'] },
+    'suno': { canonical: 'Suno', aliases: ['수노', '쑤노', '스노'] },
+    'udio': { canonical: 'Udio', aliases: ['유디오', '우디오'] },
+    'musicfx': { canonical: 'MusicFX', aliases: ['뮤직에프엑스', '뮤직fx', '뮤직FX'] },
+
+    // 개발 & 인프라
+    'cursor': { canonical: 'Cursor', aliases: ['커서', '커써', '커서AI'] },
+    'replit': { canonical: 'Replit', aliases: ['레플릿', '레플잇', '리플릿'] },
+    'windsurf': { canonical: 'Windsurf', aliases: ['윈드서프', '윈드서핑', '윈써프'] },
+    'trae': { canonical: 'Trae', aliases: ['트레이', '트래'] },
+    'codev': { canonical: 'Codev', aliases: ['코데브', '코드브'] },
+    'reweb': { canonical: 'Reweb', aliases: ['리웹'] },
+    'rork': { canonical: 'Rork', aliases: ['로크', '록'] },
+    'hugging face': { canonical: 'Hugging Face', aliases: ['허깅페이스', '허깅 페이스', '허깅페이스'] },
+    'replicate': { canonical: 'Replicate', aliases: ['레플리케이트', '레플리킷'] },
+    'groq': { canonical: 'Groq', aliases: ['그로크', '그록칩'] },
+    'cerebras': { canonical: 'Cerebras', aliases: ['세레브라스', '세러브라스'] },
+    'together ai': { canonical: 'Together AI', aliases: ['투게더AI', '투게더 AI'] },
+    'fal ai': { canonical: 'Fal AI', aliases: ['팔AI', '팔 AI'] },
+    'tost ai': { canonical: 'Tost AI', aliases: ['토스트AI', '토스트 AI'] },
+    'ollama': { canonical: 'Ollama', aliases: ['올라마', '올라마AI'] },
+    'openwebui': { canonical: 'OpenWebUI', aliases: ['오픈웹UI', '오픈웹유아이'] },
+    'pinokio': { canonical: 'Pinokio', aliases: ['피노키오'] },
+    'transformers': { canonical: 'Transformers', aliases: ['트랜스포머', '트랜스포머즈'] },
+    'dify': { canonical: 'Dify', aliases: ['디파이', '디피'] },
+    'zapier': { canonical: 'Zapier', aliases: ['재피어', '자피어'] },
+    'n8n': { canonical: 'n8n', aliases: ['엔에이트엔', 'n8n'] },
+};
+
+// Build reverse lookup: Korean alias → { canonical name, tool keys }
+const aliasLookup = {};
+for (const [key, data] of Object.entries(toolAliases)) {
+    for (const alias of data.aliases) {
+        aliasLookup[alias.toLowerCase()] = data.canonical;
+    }
+    // Also map the key itself and canonical name
+    aliasLookup[key.toLowerCase()] = data.canonical;
+    aliasLookup[data.canonical.toLowerCase()] = data.canonical;
+}
+
+// Levenshtein distance for fuzzy matching
+function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            dp[i][j] = a[i-1] === b[j-1]
+                ? dp[i-1][j-1]
+                : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+        }
+    }
+    return dp[m][n];
+}
+
+// Fuzzy search: find best matching alias for a given input
+function fuzzyMatchAlias(input) {
+    const normalized = input.toLowerCase().replace(/\s+/g, '');
+
+    // 1. Exact match (with spaces removed)
+    for (const [alias, canonical] of Object.entries(aliasLookup)) {
+        if (alias.replace(/\s+/g, '') === normalized) {
+            return canonical;
+        }
+    }
+
+    // 2. Substring/contains match
+    for (const [alias, canonical] of Object.entries(aliasLookup)) {
+        const cleanAlias = alias.replace(/\s+/g, '');
+        if (cleanAlias.includes(normalized) || normalized.includes(cleanAlias)) {
+            if (normalized.length >= 2 && cleanAlias.length >= 2) {
+                return canonical;
+            }
+        }
+    }
+
+    // 3. Fuzzy match with Levenshtein distance (only for Korean input >= 2 chars)
+    if (normalized.length >= 2) {
+        let bestMatch = null;
+        let bestDist = Infinity;
+        const threshold = normalized.length <= 3 ? 1 : Math.floor(normalized.length * 0.4);
+
+        for (const [alias, canonical] of Object.entries(aliasLookup)) {
+            const cleanAlias = alias.replace(/\s+/g, '');
+            const dist = levenshtein(normalized, cleanAlias);
+            if (dist < bestDist && dist <= threshold) {
+                bestDist = dist;
+                bestMatch = canonical;
+            }
+        }
+        if (bestMatch) return bestMatch;
+    }
+
+    return null;
+}
+
+// Search result banner elements (set after DOM loads)
+let searchResultBanner, searchResultText, searchResultCount;
+
 function saveFavorites() {
     localStorage.setItem('aiFavorites', JSON.stringify(favorites));
 }
@@ -1653,6 +1900,10 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         return;
     }
+
+    searchResultBanner = document.getElementById('searchResultBanner');
+    searchResultText = document.getElementById('searchResultText');
+    searchResultCount = document.getElementById('searchResultCount');
 
     initializeFilters();
     renderTools(aiToolsData);
@@ -1749,14 +2000,32 @@ function applyFilters() {
         filteredTools = filteredTools.filter(tool => tool.category === currentFilters.category);
     }
 
+    // Smart search with Korean alias + fuzzy matching
+    let matchedCanonical = null;
     if (currentFilters.search) {
-        const searchTerm = currentFilters.search.toLowerCase();
-        filteredTools = filteredTools.filter(tool =>
-            tool.name.toLowerCase().includes(searchTerm) ||
-            tool.killer_feature.toLowerCase().includes(searchTerm) ||
-            tool.description.toLowerCase().includes(searchTerm) ||
-            tool.category.toLowerCase().includes(searchTerm)
-        );
+        const searchTerm = currentFilters.search.toLowerCase().trim();
+
+        // Try fuzzy alias matching first
+        matchedCanonical = fuzzyMatchAlias(searchTerm);
+
+        if (matchedCanonical) {
+            // Search by the canonical (original) tool name
+            const canonicalLower = matchedCanonical.toLowerCase();
+            filteredTools = filteredTools.filter(tool =>
+                tool.name.toLowerCase().includes(canonicalLower) ||
+                tool.killer_feature.toLowerCase().includes(canonicalLower) ||
+                tool.description.toLowerCase().includes(canonicalLower) ||
+                tool.category.toLowerCase().includes(canonicalLower)
+            );
+        } else {
+            // Fallback: normal text search
+            filteredTools = filteredTools.filter(tool =>
+                tool.name.toLowerCase().includes(searchTerm) ||
+                tool.killer_feature.toLowerCase().includes(searchTerm) ||
+                tool.description.toLowerCase().includes(searchTerm) ||
+                tool.category.toLowerCase().includes(searchTerm)
+            );
+        }
     }
 
     // Pricing filter
@@ -1790,7 +2059,7 @@ function applyFilters() {
         filteredTools.sort((a, b) => a.category.localeCompare(b.category, 'ko'));
     }
 
-    renderTools(filteredTools);
+    renderTools(filteredTools, matchedCanonical);
 }
 
 // Reset Filters
@@ -1813,8 +2082,23 @@ function resetFilters() {
 }
 
 // Render Tools
-function renderTools(tools) {
+function renderTools(tools, matchedCanonical) {
     toolsGrid.innerHTML = '';
+
+    // Update search result banner
+    if (searchResultBanner) {
+        if (matchedCanonical && currentFilters.search) {
+            searchResultText.innerHTML = `<span class="matched-name">${matchedCanonical}</span>에 대한 검색결과입니다`;
+            searchResultCount.textContent = `${tools.length}건`;
+            searchResultBanner.classList.add('active');
+        } else if (currentFilters.search && currentFilters.search.trim()) {
+            searchResultText.innerHTML = `<span class="matched-name">${currentFilters.search}</span> 검색결과`;
+            searchResultCount.textContent = `${tools.length}건`;
+            searchResultBanner.classList.add('active');
+        } else {
+            searchResultBanner.classList.remove('active');
+        }
+    }
 
     if (tools.length === 0) {
         toolsGrid.innerHTML = `
